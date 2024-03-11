@@ -1,0 +1,7 @@
+Pillow
+albumentations
+opencv-python-headless
+numpy
+tqdm
+concurrent-futures
+torch
