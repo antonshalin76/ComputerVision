@@ -15,16 +15,15 @@ Dynamic YOLO Mosaic Generator – это мощный инструмент дл�
 
 ## Установка
 
-pip install dynamic_yolo_mosaic_generator
-
-Или клонируйте репозиторий для установки локальной версии:
-
+```
 git clone https://github.com/antonshalin76/ComputerVision.git
-
+```
+```
 cd ComputerVision
-
+```
+```
 pip install .
-
+```
 
 ## Примеры использования
 
