@@ -30,59 +30,57 @@ pip install .
 Пример создания мозаик с аннотациями:
 
 ```python
-from dynamic_yolo_mosaic_generator import MosaicCreator, ImageAugmentor
+from dynamic_yolo_mosaic_generator import MosaicCreator, ImageAugmentor, SplitSubset, delete_directory, read_classes, create_yaml_file, initialize_dataloaders, save_mosaics
+import os
 
-# Пусть с исходными данными
-src_directory = ...
+# Рабочие пути
+src_directory = "path/to/source" # Путь с исходными данными. По этому же пути должен лежать файл списка классов classes.txt
+dst_directory = "path/to/destination" # Путь к папке, где будут сохраняться разделенные наборы данных
+yolo_directory = "path/to/yolo" # Путь для yolo мозаик
+bbox_directory = "path/to/bbox" # Путь для визуализации мозаик с наложенными bbox
 
-# Путь к папке, где будут сохраняться разделенные наборы данных
-dst_directory = ...
-delete_directory(yolo_directory)
-os.makedirs(yolo_directory, exist_ok=True)
-
-# Путь для yolo мозаик
-yolo_directory = ...
-delete_directory(yolo_directory)
-os.makedirs(yolo_directory, exist_ok=True)
-
-# Путь для визуализации мозаик с наложенными bbox
-bbox_directory = ...
-delete_directory(bbox_directory)
-os.makedirs(bbox_directory, exist_ok=True)
+# Формирование рабочих директорий
+for directory in [dst_directory, yolo_directory, bbox_directory]:
+    delete_directory(directory)
+    os.makedirs(directory, exist_ok=True)
 
 # Создание экземпляров классов
 augmentor = ImageAugmentor()
 mosaic_creator = MosaicCreator(canvas_size=640, min_image_size=40, large_image_threshold=1280, process_large_images=False)
 
 # Чтение списка классов из файла
-class_lst = read_classes(os.path.join(src_directory, 'classes.txt'))
-# Создание файла конфигурации data.yaml для наборов без мозаик
-create_yaml_file(dst_directory, class_lst)
-# Создание файла конфигурации data.yaml для мозаик
-create_yaml_file(yolo_directory, class_lst)
-# Загрузка пар изображение-метка
-image_label_path = mosaic_creator.find_image_label_pairs(src_directory)
-total_src_pairs = len(image_label_path)
-image_bbox_pairs, large_images = mosaic_creator.process_image_label_pairs(image_label_path)
-all_image_bbox_pairs = image_bbox_pairs + large_images
+try:
+    class_lst = read_classes(os.path.join(src_directory, 'classes.txt'))
+except Exception as e:
+    print(f"Ошибка при чтении файла classes.txt: {e}")
+    class_lst = []
 
-# Распределение исходных аннотированных пар на три набора обучения
-splitter = SplitSubset(all_image_bbox_pairs, split_ratio=(0.7, 0.2, 0.1)) # Задаем пропорции наборов данных
+if class_lst:
+    # Создание конфигурационных файлов
+    create_yaml_file(dst_directory, class_lst)
+    create_yaml_file(yolo_directory, class_lst)
 
-# Проверка наличия существующих наборов данных в памяти
-data_folders = {'train': os.path.join(dst_directory, 'train'), 
-                'valid': os.path.join(dst_directory, 'valid'), 
-                'test': os.path.join(dst_directory, 'test')}
+    # Загрузка пар изображение-метка
+    image_label_path = mosaic_creator.find_image_label_pairs(src_directory)
+    image_bbox_pairs, large_images = mosaic_creator.process_image_label_pairs(image_label_path)
+    all_image_bbox_pairs = image_bbox_pairs + large_images
 
-if not all(x in globals() for x in ['train_set', 'valid_set', 'test_set']):
+    # Распределение исходных аннотированных пар на три набора обучения
+    splitter = SplitSubset(all_image_bbox_pairs, split_ratio=(0.7, 0.2, 0.1)) # Задаем пропорции наборов данных
+
+    # Проверка наличия существующих наборов данных в памяти
+    data_folders = {'train': os.path.join(dst_directory, 'train'), 
+                    'valid': os.path.join(dst_directory, 'valid'), 
+                    'test': os.path.join(dst_directory, 'test')}
+
+    train_set, valid_set, test_set = None, None, None
+
     # Проверяем, существуют ли сохраненные папки с наборами данных
     if all(os.path.exists(folder) for folder in data_folders.values()):
-        # Загружаем данные из папок
         train_set, valid_set, test_set = splitter.load_sets_from_folders(data_folders)
     else:
         # Создаем и сохраняем новые наборы данных из исходного набора
         splitter.save_splits(dst_directory)
-        # Загружаем только что созданные и сохраненные наборы данных
         train_set, valid_set, test_set = splitter.load_sets_from_folders(data_folders)
 
 # Параметры обучения
